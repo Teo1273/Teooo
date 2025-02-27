@@ -15,7 +15,7 @@ st.write('El texto escrito es', texto)
 
 st.subheader("Ahora usemos 2 columnas")
 
-col1, col2 = st.columna(2)
+col1, col2 = st.columns(2)
 
 with coll:
   st.subheader("Esta es la primera columna")
