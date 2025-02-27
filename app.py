@@ -16,3 +16,10 @@ st.write('El texto escrito es', texto)
 st.subheader("Ahora usemos 2 columnas")
 
 coll, col2 = st.columna(2)
+
+with coll:
+  st.subheader("Esta es la primera columna")
+  st.write("Las interfaces multimodales mejoran la experiencia de usuario")
+  resp = st.checkbox('Estoy de acuerdo')
+  if resp:
+    st.write('Correcto!')
