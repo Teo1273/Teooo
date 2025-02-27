@@ -45,6 +45,20 @@ in_mod = st.selectbox(
   "Selecciona la modalidad",
   ("Audio", "Visual", "Haptico"),
 )
+if in_mod == "Audio":
+  set_mod = "Reproducir audio"
+elif in_mod == "VisuaL":
+  set_mod = "Reproducir video"
+elif in_mod == "Haptico":
+  set_mod = "Activar vibracion"
+st.write(" La accion es:" , set_mod)
+
+with st.sidebar:
+  st.subheader("Configura la modalidad")
+  mod_radio = st.radio(
+    "Escoge la modalidad a usar",
+    ("Visual", "Auditiva", "Haptica")
+    
 
 
   
