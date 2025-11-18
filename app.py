@@ -1,64 +1,104 @@
+# app.py
 import streamlit as st
-from PIL import Image
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import plotly.express as px
+from influxdb_client import InfluxDBClient
 
-st.title("Mi Primera App!!")
-
-st.header("En este espacio comienzo a desarrollar mis aplicaciones para interfaces multimodales.")
-st.write("Facilmente puedo realizar backend y frontend.")
-image = Image.open ('porsche-911-gt3-rs-purple-beast-vorsteiner-18.jpg')
-
-st.image(image, caption='Interfaces multimodales')
-
-
-texto = st.text_input('Escribe algo', 'Este es mi texto')
-st.write('El texto escrito es', texto)
-
-st.subheader("Ahora usemos 2 columnas")
-
-col1, col2 = st.columns(2)
-
-with col1:
-  st.subheader("Esta es la primera columna")
-  st.write("Las interfaces multimodales mejoran la experiencia de usuario")
-  resp = st.checkbox('Estoy de acuerdo')
-  if resp:
-    st.write('Correcto!')
-with col2:
-  st.subheader("Esta es la segunda columna")
-  modo = st.radio("Que Modalidad es la principal en tu interfaz",('Visual', 'Auditiva', 'Tactil'))
-  if modo == 'Visual':
-    st.write('La vista es fundamental para tu interfaz')
-  if modo == 'Auditiva':
-    st.write('La audicion es fundamental para tu interfaz')
-  if modo == 'Tactil':
-    st.write('El tactil es fundamental para tu interfaz')
-
-
-st.subheader("Uso de botones")
-if st.button('Presiona el boton'):
-    st.write('Gracias por presionar')
-else:
-    st.write('No has presionado aun')
-
-st.subheader("Selectbox")
-in_mod = st.selectbox(
-  "Selecciona la modalidad",
-  ("Audio", "Visual", "Haptico"),
+# --------------------------
+# Configuración Streamlit
+# --------------------------
+st.set_page_config(
+    page_title="IoT Dashboard - Monitoreo Ambiental y de Movimiento",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
-if in_mod == "Audio":
-  set_mod = "Reproducir audio"
-elif in_mod == "VisuaL":
-  set_mod = "Reproducir video"
-elif in_mod == "Haptico":
-  set_mod = "Activar vibracion"
-st.write(" La accion es:" , set_mod)
 
-with st.sidebar:
-  st.subheader("Configura la modalidad")
-  mod_radio = st.radio(
-    "Escoge la modalidad a usar",
-    ("Visual", "Auditiva", "Haptica")
-  )
+st.title("🌿 IoT Dashboard - Monitoreo Ambiental y de Movimiento")
+st.markdown(
+    "Este tablero muestra datos en tiempo real de sensores **DHT22** (temperatura y humedad) "
+    "y **MPU6050** (aceleración y orientación)."
+)
+
+# --------------------------
+# Sidebar - Filtros
+# --------------------------
+st.sidebar.header("Filtros de visualización")
+tiempo_actual = datetime.now()
+fecha_inicio = st.sidebar.date_input("Fecha inicio", tiempo_actual - timedelta(days=1))
+fecha_fin = st.sidebar.date_input("Fecha fin", tiempo_actual)
+actualizar = st.sidebar.button("Actualizar datos")
+
+# --------------------------
+# Conexión a InfluxDB
+# --------------------------
+INFLUX_URL = "https://tu-influxdb-url.com"
+INFLUX_TOKEN = "tu-token-aqui"
+INFLUX_ORG = "tu-org"
+INFLUX_BUCKET = "tu-bucket"
+
+client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
+query_api = client.query_api()
+
+# Función para obtener datos del DHT22
+def obtener_dht22(fecha_inicio, fecha_fin):
+    query = f'''
+    from(bucket:"{INFLUX_BUCKET}")
+    |> range(start: {fecha_inicio.isoformat()}T00:00:00Z, stop: {fecha_fin.isoformat()}T23:59:59Z)
+    |> filter(fn: (r) => r["_measurement"] == "DHT22")
+    '''
+    result = query_api.query_data_frame(query)
+    if not result.empty:
+        df = result[["_time", "_field", "_value"]].pivot(index="_time", columns="_field", values="_value")
+        df = df.reset_index()
+        return df
+    return pd.DataFrame()
+
+# Función para obtener datos del MPU6050
+def obtener_mpu6050(fecha_inicio, fecha_fin):
+    query = f'''
+    from(bucket:"{INFLUX_BUCKET}")
+    |> range(start: {fecha_inicio.isoformat()}T00:00:00Z, stop: {fecha_fin.isoformat()}T23:59:59Z)
+    |> filter(fn: (r) => r["_measurement"] == "MPU6050")
+    '''
+    result = query_api.query_data_frame(query)
+    if not result.empty:
+        df = result[["_time", "_field", "_value"]].pivot(index="_time", columns="_field", values="_value")
+        df = df.reset_index()
+        return df
+    return pd.DataFrame()
+
+# --------------------------
+# Obtención de datos
+# --------------------------
+if actualizar:
+    dht22_data = obtener_dht22(fecha_inicio, fecha_fin)
+    mpu6050_data = obtener_mpu6050(fecha_inicio, fecha_fin)
+
+    if not dht22_data.empty:
+        st.subheader("🌡️ Temperatura y Humedad (DHT22)")
+        fig_temp = px.line(dht22_data, x="_time", y="temperature", title="Temperatura")
+        fig_hum = px.line(dht22_data, x="_time", y="humidity", title="Humedad")
+        st.plotly_chart(fig_temp, use_container_width=True)
+        st.plotly_chart(fig_hum, use_container_width=True)
+        
+        # Indicadores simples
+        col1, col2 = st.columns(2)
+        col1.metric("Temperatura Actual (°C)", dht22_data['temperature'].iloc[-1])
+        col2.metric("Humedad Actual (%)", dht22_data['humidity'].iloc[-1])
+
+    if not mpu6050_data.empty:
+        st.subheader("🌀 Movimiento (MPU6050)")
+        fig_acc = px.line(mpu6050_data, x="_time", y=["acc_x","acc_y","acc_z"], title="Aceleración")
+        st.plotly_chart(fig_acc, use_container_width=True)
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Acc X", mpu6050_data['acc_x'].iloc[-1])
+        col2.metric("Acc Y", mpu6050_data['acc_y'].iloc[-1])
+        col3.metric("Acc Z", mpu6050_data['acc_z'].iloc[-1])
+else:
+    st.info("Seleccione la fecha y presione 'Actualizar datos' para visualizar la información.")
 
   
     
